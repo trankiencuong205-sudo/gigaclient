@@ -10,7 +10,9 @@ permissions:
 
 jobs:
   build:
+    name: Build Fabric Mod
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout source
         uses: actions/checkout@v5
@@ -21,23 +23,55 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Extract project
+      - name: Extract project source
+        id: project
+        shell: bash
         run: |
-          unzip -o giga-client-clean-project.zip -d extracted
-          find extracted -name build.gradle -print
-          test -f extracted/giga-client-fixed/build.gradle
+          set -euo pipefail
+          mkdir -p extracted
 
-      - name: Setup Gradle
+          if [ -f giga-client-clean-project.zip ]; then
+            unzip -o giga-client-clean-project.zip -d extracted
+          elif [ -f giga-client-expanded-source.zip ]; then
+            unzip -o giga-client-expanded-source.zip -d extracted
+          else
+            echo "::error::No project ZIP found in repository root."
+            exit 1
+          fi
+
+          BUILD_FILE="$(find extracted -type f \( \
+            -name build.gradle -o \
+            -name build.gradle.kts \
+          \) -print -quit)"
+
+          if [ -z "$BUILD_FILE" ]; then
+            echo "::error::No build.gradle or build.gradle.kts found in ZIP."
+            find extracted -maxdepth 4 -type f -print
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$BUILD_FILE")"
+          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+          echo "Project directory: $PROJECT_DIR"
+          ls -la "$PROJECT_DIR"
+
+      - name: Setup Gradle 8.14.3
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
 
       - name: Build GIGA
-        working-directory: extracted/giga-client-fixed
-        run: gradle build --no-daemon --stacktrace
+        working-directory: ${{ steps.project.outputs.dir }}
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --version
+          gradle build --no-daemon --stacktrace
 
       - name: Upload JAR
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: GIGA-Client-JAR
-          path: extracted/giga-client-fixed/build/libs/*.jar
+          path: extracted/**/build/libs/*.jar
           if-no-files-found: error
