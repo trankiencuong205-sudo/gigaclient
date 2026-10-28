@@ -4,33 +4,40 @@ on:
   push:
     branches:
       - main
+
 permissions:
   contents: read
+
 jobs:
   build:
-    name: Build Fabric Mod
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
         uses: actions/checkout@v5
+
       - name: Setup Java 21
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
-      - name: Check Gradle files
+
+      - name: Extract project
         run: |
-          echo "Checking project files..."
-          ls -la
-          test -f gradlew
-          test -f gradle/wrapper/gradle-wrapper.properties
-          chmod +x gradlew
+          unzip -o giga-client-clean-project.zip -d extracted
+          find extracted -name build.gradle -print
+          test -f extracted/giga-client-fixed/build.gradle
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Build GIGA
-        run: ./gradlew build --no-daemon --stacktrace
+        working-directory: extracted/giga-client-fixed
+        run: gradle build --no-daemon --stacktrace
+
       - name: Upload JAR
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: GIGA-Client-JAR
-          path: build/libs/*.jar
+          path: extracted/giga-client-fixed/build/libs/*.jar
           if-no-files-found: error
